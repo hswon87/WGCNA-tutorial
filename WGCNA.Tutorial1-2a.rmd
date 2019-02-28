@@ -1,0 +1,110 @@
+---
+title: "WGCNA: Tutorial 1-2a"
+author: "Sangwon Han"
+date: "2019-2-27"
+output: html_document
+---
+
+#1 Set up the R session
+
+```{r}
+suppressMessages(library(WGCNA))
+options(stringsAsFactors = FALSE)
+enableWGCNAThreads()    # allow multi-threading within WGCNA
+lnames = load(file = "FemaleLiver-01-dataInput.RData")
+lnames
+```
+
+#2-1. Automatic network construction and module detection
+##2-1-1. Choosing the soft-thresholding power
+
+Use the function **pickSoftThreshold**
+```{r}
+powers = c(c(1:10), seq(from = 12, to = 20, by =2))     # make a set of powers
+
+# call the network topology analysis function
+sft = pickSoftThreshold(datExpr, powerVector = powers, verbose = 5)
+str(sft)
+```
+
+Plot the results                        
+```{r}
+sizeGrWindow(9, 5)
+par(mfrow = c(1, 2))
+cex1 = 0.9
+
+# Scale-free topology fit index as a function of the soft-thresholding power (type = "n" mean no coordinate)
+plot(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
+        xlab = "Soft Threshold (power)", ylab = "Scale Free Topology Model Fit, signed R^2", type = "n",
+        main = paste("Scale independence"))                     
+text(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
+        labels = powers, cex = cex1, col = "red")
+abline(h = 0.90, col = "red")
+
+
+# Plot mean connectivity as a function of the soft-thresholding power
+plot(sft$fitIndices[,1], sft$fitIndices[,5],
+     xlab = "Soft Threshold (power)", ylab = "Mean connectivity", type = "n",
+     main = paste("Mean connectivity"))
+text(sft$fitIndices[,1], sft$fitIndices[,5], labels = powers, cex = cex1, col = "red")
+```
+
+We choose power 6, for which scale-free topology fit index curve flatten with high value (0.90)
+
+
+
+##2-1-2. One-step network construction and module detection
+
+we set relatively large minimum module size (**minModuleSize = 30**), medium sensitivity (**deepSplit = 2**).
+**maxBlockSize**  = 5000 in deflaut, so dataset with > 5000 probes will lead to errors.
+(4GB memory can handle 10,000 probes, 16GB -> 20,000, 32GB -> 30000)
+
+- **mergeCutHeight** = the threshold for merging of modules
+- **numericLables** = return numeric (not color) labels for modules 
+- **saveTOMs** = save Topological Overlap Matrix
+```{r}
+net = blockwiseModules(datExpr, power = 6,
+                       TOMtype = "unsigned", minModuleSize = 30,
+                       reassignThreshold = 0, mergeCutHeight = 0.25,
+                       numericLabels = TRUE, pamRespectsDendro = FALSE,
+                       saveTOMs = TRUE,
+                       saveTOMFileBase = "femaleMouseTOM",
+                       verbose = 3)
+```
+
+- net$colors = module assignment
+- net$MEs = module eigengenes
+```{r}
+str(net)
+```
+
+There are 18 modules in descending size order (1~18, 0 = outside of all modules)
+```{r}
+table(net$colors)
+```
+
+The hierarchical clustering dendrogram used for the module identification
+```{r}
+# open a graphics window
+sizeGrWindow(12, 9)
+
+# Convert labels to colors for plotting
+mergedColors = labels2colors(net$colors)
+
+# Plot the dendrogram and the module colors underneath
+plotDendroAndColors(net$dendrograms[[1]], mergedColors[net$blockGenes[[1]]],
+                "Module colors",
+                dendroLabels = FALSE, hang = 0.03,
+                addGuide =  TRUE, guideHang = 0.05)
+```
+**recutBlockwiseTrees**: to change the treecut, module membership, module merging criteria
+
+Now, save the module assignment and module eigengene information for subsequent analysis.
+```{r}
+moduleLabels = net$colors
+moduleColors = labels2colors(net$colors)
+MEs = net$MEs
+geneTree = net$dendrograms[[1]]
+save(MEs, moduleLabels, moduleColors, geneTree, file = "FemaleLiver-02-networkConstruction-auto.RData")
+```
+
